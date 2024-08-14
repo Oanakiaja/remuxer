@@ -1,41 +1,95 @@
-// const decoder = new VideoDecoder({
-//   output: (frame) => handleFrame(frame),
-//   error: (error) => console.error("Decoding error:", error),
-// });
-// const encoder = new VideoEncoder({
-//   output: (chunk) => handleChunk(chunk),
-//   error: (error) => console.error("Encoding error:", error),
-// });
+class Codecs {
+  vDecoder: VideoDecoder;
+  vEncoder: VideoEncoder;
+  aDecoder: AudioDecoder;
+  aEncoder: AudioEncoder;
 
-// decoder.configure({
-//   codec: "avc1.42E01E",
-//   codedWidth: 640,
-//   codedHeight: 480,
-// });
+  constructor({
+    decodeConfig,
+    encodeConfig,
+  }: {
+    decodeConfig: {
+      v: VideoDecoderConfig;
+      a: AudioDecoderConfig;
+    };
+    encodeConfig: {
+      v: VideoEncoderConfig;
+      a: AudioDecoderConfig;
+    };
+  }) {
+    const [vDecoder, aDecoder] = this._createDecoder(decodeConfig);
+    const [vEncoder, aEncoder] = this._createEncoder(encodeConfig);
+    this.vDecoder = vDecoder;
+    this.aDecoder = aDecoder;
+    this.vEncoder = vEncoder;
+    this.aEncoder = aEncoder;
+  }
 
-// encoder.configure({
-//   codec: "vp09.00.10.08",
-//   width: 640,
-//   height: 480,
-//   bitrate: 1000000,
-//   framerate: 30,
-// });
+  private _createDecoder(decodeConfig: {
+    v: VideoDecoderConfig;
+    a: AudioDecoderConfig;
+  }) {
+    const vDecoder = new VideoDecoder({
+      output: this.handleDecodedVideoFrame,
+      error: (e) => console.error(e),
+    });
 
-// decoder.decode(
-//   new EncodedVideoChunk({
-//     type: "key",
-//     timestamp: 0,
-//     data: new Uint8Array(fileBuffer),
-//   })
-// );
+    const aDecoder = new AudioDecoder({
+      output: this.handleDecodedAudioData,
+      error: (e) => console.error(e),
+    });
 
-// function handleFrame(videoFrame) {
-//   console.log("Frame decoded", videoFrame);
-//   encoder.encode(videoFrame);
-//   videoFrame.close();
-// }
+    vDecoder.configure(decodeConfig.v);
+    aDecoder.configure(decodeConfig.a);
 
-// function handleChunk(encodedChunk) {
-//   console.log("Chunk encoded", encodedChunk);
-//   // 这里可以将编码的数据块保存或进一步处理
-// }
+    return [vDecoder, aDecoder] as const;
+  }
+
+  private _createEncoder(encodeConfig: {
+    v: VideoEncoderConfig;
+    a: AudioDecoderConfig;
+  }) {
+    // webm
+    // v:
+    // VP8
+    // VP9
+    // AV1
+    // a:
+    // Vorbis
+    // Opus
+
+    const vEncoder = new VideoEncoder({
+      output: this.handleEncodedVideoChunk,
+      error: (e) => console.error(e),
+    });
+
+    const aEncoder = new AudioEncoder({
+      output: this.handleEncodedAudioChunk,
+      error: (e) => console.error(e),
+    });
+
+    vEncoder.configure(encodeConfig.v);
+    aEncoder.configure(encodeConfig.a);
+
+    return [vEncoder, aEncoder] as const;
+  }
+
+  handleDecodedVideoFrame(frame: VideoFrame) {
+    this.vEncoder.encode(frame);
+    frame.close();
+  }
+
+  handleEncodedVideoChunk(chunk: EncodedVideoChunk) {
+    console.log("Encoded video chunk:", chunk);
+  }
+
+  handleDecodedAudioData(data: AudioData) {
+    this.aEncoder.encode(data);
+    data.close();
+  }
+
+  // 处理编码后的音频数据块
+  handleEncodedAudioChunk(chunk: EncodedAudioChunk) {
+    console.log("Encoded audio chunk:", chunk);
+  }
+}
