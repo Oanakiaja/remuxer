@@ -1,6 +1,6 @@
 import * as mp4box from "mp4box";
 
-class Muxer {
+class DeMuxer {
   mp4box: ReturnType<typeof mp4box.createFile>;
 
   constructor() {
@@ -26,4 +26,4 @@ class Muxer {
   }
 }
 
-export default Muxer;
+export default DeMuxer;

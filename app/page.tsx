@@ -3,13 +3,17 @@ import { Info } from "@/components/info";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Video from "@/components/video";
+import { Codecs } from "@/lib/codecs";
 import { FileInput } from "@/lib/files";
-import Muxer from "@/lib/mux";
-import { type ChangeEventHandler, useState } from "react";
+import DeMuxer from "@/lib/mux/demuxer";
+import Muxer from "@/lib/mux/muxer";
+import { type ChangeEventHandler, useRef, useState } from "react";
 
 export default function Home() {
   const [videoUrl, setVideoUrl] = useState("");
+  const [webmUrl, setWebmUrl] = useState("");
   const [videoInfo, setVideoInfo] = useState<Mp4Info | undefined>();
+  const fileArrayBufferRef = useRef<ArrayBuffer>();
 
   const handleFileChange: ChangeEventHandler<HTMLInputElement> = async (
     event
@@ -22,7 +26,8 @@ export default function Home() {
     if (!fileArrayBuffer) {
       return;
     }
-    const mux = new Muxer();
+    fileArrayBufferRef.current = fileArrayBuffer;
+    const mux = new DeMuxer();
     const info = await mux.getInfo(fileArrayBuffer);
     setVideoInfo(info);
     handleVideoShow(file);
@@ -35,16 +40,19 @@ export default function Home() {
   };
 
   const handleMuxer = async () => {
-    if (!videoInfo) {
+    if (!videoInfo || !fileArrayBufferRef.current) {
       return;
     }
 
+
+    
     const decodeConfig = {
       v: {
         codec: videoInfo.videoTracks[0].codec,
         width: videoInfo.videoTracks[0]?.video?.width,
         height: videoInfo.videoTracks[0]?.video?.height,
-        hardwareAcceleration: "prefer-hardware" as const,
+        // description: FIXME:
+        // hardwareAcceleration: "prefer-hardware" as const, // vp8 not support
       },
       a: {
         codec: videoInfo.audioTracks[0].codec,
@@ -54,19 +62,41 @@ export default function Home() {
       },
     };
 
+    const muxer = new Muxer({
+      height: decodeConfig.v.height,
+      width: decodeConfig.v.width,
+    });
+
     const codecs = new Codecs({
       decodeConfig,
       encodeConfig: {
         v: {
           ...decodeConfig.v,
-          codec: "vp9",
+          codec: "vp8",
         },
         a: {
           ...decodeConfig.a,
           codec: "opus",
         },
+        handler: {
+          handleEncodedVideoChunk: muxer.addVideoChunk,
+          handleEncodedAudioChunk: muxer.addAudioChunk,
+        },
       },
     });
+
+    const videoChunkIFrame = new EncodedVideoChunk({
+      type: "key",
+      timestamp: 0,
+      data: fileArrayBufferRef.current,
+    });
+    codecs.decode(videoChunkIFrame);
+
+    await codecs.flush();
+    const buffer = await muxer.getWebm();
+    const blob = new Blob([buffer], { type: "video/webm" });
+    const url = URL.createObjectURL(blob);
+    setWebmUrl(url);
   };
 
   return (
@@ -85,14 +115,16 @@ export default function Home() {
             disabled={!videoInfo}
             onClick={handleMuxer}
           >
-            remuxer!
+            Convert Mp4 to Webm
           </Button>
           <div>
-            <h2>
-              <span className="text-yellow-400">TODO: </span> Converted video{" "}
-              (webm)
-            </h2>
-            <Video src={videoUrl} autoPlay controls muted />
+            <h2>Converted video (webm)</h2>
+            <Video src={webmUrl} autoPlay controls muted />
+            <Button disabled={!webmUrl} className="my-4 h-16 w-full">
+              <a href={webmUrl} download="video.webm">
+                download
+              </a>
+            </Button>
           </div>
         </div>
       </div>

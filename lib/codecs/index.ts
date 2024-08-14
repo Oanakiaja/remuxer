@@ -15,10 +15,23 @@ class Codecs {
     encodeConfig: {
       v: VideoEncoderConfig;
       a: AudioDecoderConfig;
+      handler: {
+        handleEncodedVideoChunk: (
+          chunk: EncodedVideoChunk,
+          metadata?: EncodedVideoChunkMetadata
+        ) => void;
+        handleEncodedAudioChunk: (
+          chunk: EncodedAudioChunk,
+          metadata: EncodedAudioChunkMetadata
+        ) => void;
+      };
     };
   }) {
     const [vDecoder, aDecoder] = this._createDecoder(decodeConfig);
-    const [vEncoder, aEncoder] = this._createEncoder(encodeConfig);
+    const [vEncoder, aEncoder] = this._createEncoder(encodeConfig, {
+      handleEncodedAudioChunk: encodeConfig.handler.handleEncodedAudioChunk,
+      handleEncodedVideoChunk: encodeConfig.handler.handleEncodedVideoChunk,
+    });
     this.vDecoder = vDecoder;
     this.aDecoder = aDecoder;
     this.vEncoder = vEncoder;
@@ -30,12 +43,12 @@ class Codecs {
     a: AudioDecoderConfig;
   }) {
     const vDecoder = new VideoDecoder({
-      output: this.handleDecodedVideoFrame,
+      output: this._handleDecodedVideoFrame,
       error: (e) => console.error(e),
     });
 
     const aDecoder = new AudioDecoder({
-      output: this.handleDecodedAudioData,
+      output: this._handleDecodedAudioData,
       error: (e) => console.error(e),
     });
 
@@ -45,26 +58,29 @@ class Codecs {
     return [vDecoder, aDecoder] as const;
   }
 
-  private _createEncoder(encodeConfig: {
-    v: VideoEncoderConfig;
-    a: AudioDecoderConfig;
-  }) {
-    // webm
-    // v:
-    // VP8
-    // VP9
-    // AV1
-    // a:
-    // Vorbis
-    // Opus
-
+  private _createEncoder(
+    encodeConfig: {
+      v: VideoEncoderConfig;
+      a: AudioDecoderConfig;
+    },
+    handler: {
+      handleEncodedVideoChunk: (
+        chunk: EncodedVideoChunk,
+        metadata?: EncodedVideoChunkMetadata
+      ) => void;
+      handleEncodedAudioChunk: (
+        chunk: EncodedAudioChunk,
+        metadata: EncodedAudioChunkMetadata
+      ) => void;
+    }
+  ) {
     const vEncoder = new VideoEncoder({
-      output: this.handleEncodedVideoChunk,
+      output: handler.handleEncodedVideoChunk,
       error: (e) => console.error(e),
     });
 
     const aEncoder = new AudioEncoder({
-      output: this.handleEncodedAudioChunk,
+      output: handler.handleEncodedAudioChunk,
       error: (e) => console.error(e),
     });
 
@@ -74,22 +90,23 @@ class Codecs {
     return [vEncoder, aEncoder] as const;
   }
 
-  handleDecodedVideoFrame(frame: VideoFrame) {
+  private _handleDecodedVideoFrame(frame: VideoFrame) {
     this.vEncoder.encode(frame);
     frame.close();
   }
 
-  handleEncodedVideoChunk(chunk: EncodedVideoChunk) {
-    console.log("Encoded video chunk:", chunk);
-  }
-
-  handleDecodedAudioData(data: AudioData) {
+  private _handleDecodedAudioData(data: AudioData) {
     this.aEncoder.encode(data);
     data.close();
   }
 
-  // 处理编码后的音频数据块
-  handleEncodedAudioChunk(chunk: EncodedAudioChunk) {
-    console.log("Encoded audio chunk:", chunk);
+  decode(chunk: EncodedVideoChunk) {
+    this.vDecoder.decode(chunk);
+  }
+
+  async flush() {
+    await this.vEncoder.flush();
   }
 }
+
+export { Codecs };
