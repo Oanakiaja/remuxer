@@ -1,8 +1,9 @@
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
+import { MP4Info } from "mp4box";
 dayjs.extend(duration);
 
-export const Info = ({ videoInfo }: { videoInfo?: Mp4Info }) => {
+export const Info = ({ videoInfo }: { videoInfo?: MP4Info }) => {
   if (!videoInfo) {
     return <div>no video info</div>;
   }

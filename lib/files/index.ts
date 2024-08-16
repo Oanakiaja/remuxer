@@ -1,11 +1,13 @@
 const FileInput = {
+  getReadableStream: (file: File) => {
+    const stream = file.stream();
+    const reader = stream.getReader();
+    return reader;
+  },
   getFileArrayBuffer: async (
-    file?: File
+    file: File
   ): Promise<undefined | null | ArrayBuffer> => {
     return new Promise((resolve, reject) => {
-      if (!file) {
-        return;
-      }
       const fileReader = new FileReader();
       fileReader.onload = (res) => {
         resolve(res.target?.result as ArrayBuffer);
@@ -15,11 +17,8 @@ const FileInput = {
       fileReader.readAsArrayBuffer(file);
     });
   },
-  getDataUrl: async (file?: File): Promise<string | undefined> => {
+  getDataUrl: async (file: File): Promise<string | undefined> => {
     return new Promise((resolve, reject) => {
-      if (!file) {
-        return;
-      }
       const fileReader = new FileReader();
       fileReader.onload = (res) => {
         resolve(res.target?.result as string);

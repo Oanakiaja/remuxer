@@ -1,8 +1,8 @@
 class Codecs {
   vDecoder: VideoDecoder;
   vEncoder: VideoEncoder;
-  aDecoder: AudioDecoder;
-  aEncoder: AudioEncoder;
+  aDecoder?: AudioDecoder;
+  aEncoder?: AudioEncoder;
 
   constructor({
     decodeConfig,
@@ -10,17 +10,17 @@ class Codecs {
   }: {
     decodeConfig: {
       v: VideoDecoderConfig;
-      a: AudioDecoderConfig;
+      a?: AudioDecoderConfig;
     };
     encodeConfig: {
       v: VideoEncoderConfig;
-      a: AudioDecoderConfig;
+      a?: AudioDecoderConfig;
       handler: {
         handleEncodedVideoChunk: (
           chunk: EncodedVideoChunk,
           metadata?: EncodedVideoChunkMetadata
         ) => void;
-        handleEncodedAudioChunk: (
+        handleEncodedAudioChunk?: (
           chunk: EncodedAudioChunk,
           metadata: EncodedAudioChunkMetadata
         ) => void;
@@ -40,19 +40,19 @@ class Codecs {
 
   private _createDecoder(decodeConfig: {
     v: VideoDecoderConfig;
-    a: AudioDecoderConfig;
+    a?: AudioDecoderConfig;
   }) {
     const vDecoder = new VideoDecoder({
-      output: this._handleDecodedVideoFrame,
+      output: this._handleDecodedVideoFrame.bind(this),
       error: (e) => console.error(e),
     });
-
-    const aDecoder = new AudioDecoder({
-      output: this._handleDecodedAudioData,
-      error: (e) => console.error(e),
-    });
-
     vDecoder.configure(decodeConfig.v);
+
+    if (!decodeConfig.a) return [vDecoder] as const;
+    const aDecoder = new AudioDecoder({
+      output: this._handleDecodedAudioData.bind(this),
+      error: (e) => console.error(e),
+    });
     aDecoder.configure(decodeConfig.a);
 
     return [vDecoder, aDecoder] as const;
@@ -61,14 +61,14 @@ class Codecs {
   private _createEncoder(
     encodeConfig: {
       v: VideoEncoderConfig;
-      a: AudioDecoderConfig;
+      a?: AudioDecoderConfig;
     },
     handler: {
       handleEncodedVideoChunk: (
         chunk: EncodedVideoChunk,
         metadata?: EncodedVideoChunkMetadata
       ) => void;
-      handleEncodedAudioChunk: (
+      handleEncodedAudioChunk?: (
         chunk: EncodedAudioChunk,
         metadata: EncodedAudioChunkMetadata
       ) => void;
@@ -79,12 +79,16 @@ class Codecs {
       error: (e) => console.error(e),
     });
 
+    vEncoder.configure(encodeConfig.v);
+
+    if (!encodeConfig.a || !handler.handleEncodedAudioChunk)
+      return [vEncoder] as const;
+
     const aEncoder = new AudioEncoder({
       output: handler.handleEncodedAudioChunk,
       error: (e) => console.error(e),
     });
 
-    vEncoder.configure(encodeConfig.v);
     aEncoder.configure(encodeConfig.a);
 
     return [vEncoder, aEncoder] as const;
@@ -96,6 +100,7 @@ class Codecs {
   }
 
   private _handleDecodedAudioData(data: AudioData) {
+    if (!this.aEncoder) return;
     this.aEncoder.encode(data);
     data.close();
   }

@@ -5,15 +5,17 @@ import { Input } from "@/components/ui/input";
 import Video from "@/components/video";
 import { Codecs } from "@/lib/codecs";
 import { FileInput } from "@/lib/files";
-import DeMuxer from "@/lib/mux/demuxer";
+import { MP4Demuxer } from "@/lib/mux/demuxer";
 import Muxer from "@/lib/mux/muxer";
+import { readerToStream } from "@/lib/stream";
+import { MP4Info } from "mp4box";
 import { type ChangeEventHandler, useRef, useState } from "react";
 
 export default function Home() {
   const [videoUrl, setVideoUrl] = useState("");
   const [webmUrl, setWebmUrl] = useState("");
-  const [videoInfo, setVideoInfo] = useState<Mp4Info | undefined>();
-  const fileArrayBufferRef = useRef<ArrayBuffer>();
+  const [videoInfo, setVideoInfo] = useState<MP4Info | undefined>();
+  const demuxRef = useRef<MP4Demuxer>();
 
   const handleFileChange: ChangeEventHandler<HTMLInputElement> = async (
     event
@@ -22,14 +24,10 @@ export default function Home() {
     if (!file) {
       return;
     }
-    const fileArrayBuffer = await FileInput.getFileArrayBuffer(file);
-    if (!fileArrayBuffer) {
-      return;
-    }
-    fileArrayBufferRef.current = fileArrayBuffer;
-    const mux = new DeMuxer();
-    const info = await mux.getInfo(fileArrayBuffer);
-    setVideoInfo(info);
+    const fileStream = await FileInput.getReadableStream(file);
+    const mux = new MP4Demuxer(readerToStream(fileStream));
+    demuxRef.current = mux;
+    setVideoInfo(await mux.info);
     handleVideoShow(file);
   };
 
@@ -40,32 +38,19 @@ export default function Home() {
   };
 
   const handleMuxer = async () => {
-    if (!videoInfo || !fileArrayBufferRef.current) {
-      return;
-    }
-
-
-    
+    if (!demuxRef.current) return;
+    const config = await demuxRef.current.config;
     const decodeConfig = {
-      v: {
-        codec: videoInfo.videoTracks[0].codec,
-        width: videoInfo.videoTracks[0]?.video?.width,
-        height: videoInfo.videoTracks[0]?.video?.height,
-        // description: FIXME:
-        // hardwareAcceleration: "prefer-hardware" as const, // vp8 not support
-      },
-      a: {
-        codec: videoInfo.audioTracks[0].codec,
-        sampleRate: videoInfo.audioTracks[0]?.audio.sample_rate,
-        numberOfChannels: videoInfo.audioTracks[0]?.audio.channel_count,
-        bitrate: videoInfo.audioTracks[0].bitrate,
-      },
+      v: config,
     };
 
-    const muxer = new Muxer({
-      height: decodeConfig.v.height,
-      width: decodeConfig.v.width,
-    });
+    const muxer = new Muxer(
+      {
+        height: decodeConfig.v.height,
+        width: decodeConfig.v.width,
+      },
+      (videoInfo?.duration! / videoInfo?.timescale!) * 1e6
+    );
 
     const codecs = new Codecs({
       decodeConfig,
@@ -74,24 +59,17 @@ export default function Home() {
           ...decodeConfig.v,
           codec: "vp8",
         },
-        a: {
-          ...decodeConfig.a,
-          codec: "opus",
-        },
         handler: {
-          handleEncodedVideoChunk: muxer.addVideoChunk,
-          handleEncodedAudioChunk: muxer.addAudioChunk,
+          handleEncodedVideoChunk: muxer.addVideoChunk.bind(muxer),
         },
       },
     });
 
-    const videoChunkIFrame = new EncodedVideoChunk({
-      type: "key",
-      timestamp: 0,
-      data: fileArrayBufferRef.current,
-    });
-    codecs.decode(videoChunkIFrame);
-
+    demuxRef.current.onChunk = (chunk) => {
+      codecs.decode(chunk);
+    };
+    demuxRef.current.start();
+    // encode
     await codecs.flush();
     const buffer = await muxer.getWebm();
     const blob = new Blob([buffer], { type: "video/webm" });
@@ -120,11 +98,11 @@ export default function Home() {
           <div>
             <h2>Converted video (webm)</h2>
             <Video src={webmUrl} autoPlay controls muted />
-            <Button disabled={!webmUrl} className="my-4 h-16 w-full">
+            {/* <Button disabled={!webmUrl} className="my-4 h-16 w-full">
               <a href={webmUrl} download="video.webm">
                 download
               </a>
-            </Button>
+            </Button> */}
           </div>
         </div>
       </div>
