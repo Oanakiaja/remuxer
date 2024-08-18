@@ -8,8 +8,17 @@ I have also been learning about Web Media Tech recently. I want to use WebCodecs
 
 ## What is a remuxer?
 
-Local & Private & Quick & Free  
+Local & Private & Quick & Free
 
 lower the cost.
 -   [cloudconvert](https://cloudconvert.com/mp4-converter), which use cloud computing to convert mp4 to webm.
 
+## TODO
+
+-   [ ] Worker
+-   [ ] File change
+-   [ ] right end promise
+-   [ ] progress
+-   [ ] draggable
+-   [ ] size show
+-   [ ] compatibility
